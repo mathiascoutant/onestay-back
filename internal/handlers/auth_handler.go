@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
@@ -9,7 +10,7 @@ import (
 	"onestay-back/internal/utils"
 
 	"github.com/gin-gonic/gin"
-	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
 type AuthHandler struct {
@@ -60,19 +61,19 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
-	roleID, err := primitive.ObjectIDFromHex(req.RoleID)
+	role, err := h.roleRepo.FindByID(ctx, req.RoleID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Format de role_id invalide",
-		})
-		return
-	}
-
-	role, err := h.roleRepo.FindByID(ctx, roleID)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Rôle introuvable",
-		})
+		if err == mongo.ErrNoDocuments {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "Rôle introuvable",
+				"role_id": req.RoleID,
+			})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Erreur lors de la recherche du rôle",
+				"details": err.Error(),
+			})
+		}
 		return
 	}
 
@@ -154,4 +155,152 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, response)
+}
+
+func (h *AuthHandler) GetRoles(c *gin.Context) {
+	ctx := c.Request.Context()
+	
+	roles, err := h.roleRepo.GetAll(ctx)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Erreur lors de la récupération des rôles",
+		})
+		return
+	}
+	
+	var rolesResponse []gin.H
+	for _, role := range roles {
+		rolesResponse = append(rolesResponse, gin.H{
+			"id":   role.ID,
+			"name": role.Name,
+			"slug": role.Slug,
+		})
+	}
+	
+	c.JSON(http.StatusOK, gin.H{
+		"roles": rolesResponse,
+	})
+}
+
+func (h *AuthHandler) CreateRole(c *gin.Context) {
+	var req models.CreateRoleRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Données invalides",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	// Vérifier si le slug existe déjà
+	exists, err := h.roleRepo.ExistsBySlug(ctx, req.Slug)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Erreur lors de la vérification du slug",
+		})
+		return
+	}
+
+	if exists {
+		c.JSON(http.StatusConflict, gin.H{
+			"error": "Un rôle avec ce slug existe déjà",
+		})
+		return
+	}
+
+	// Récupérer tous les rôles pour trouver le prochain ID
+	allRoles, err := h.roleRepo.GetAll(ctx)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Erreur lors de la récupération des rôles",
+		})
+		return
+	}
+
+	// Trouver le plus grand ID numérique
+	maxID := 0
+	for _, r := range allRoles {
+		var idNum int
+		if _, err := fmt.Sscanf(r.ID, "%d", &idNum); err == nil {
+			if idNum > maxID {
+				maxID = idNum
+			}
+		}
+	}
+
+	// Générer le prochain ID
+	nextID := fmt.Sprintf("%d", maxID+1)
+
+	role := &models.Role{
+		ID:   nextID,
+		Name: req.Name,
+		Slug: req.Slug,
+	}
+
+	if err := h.roleRepo.Create(ctx, role); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Erreur lors de la création du rôle",
+		})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"message": "Rôle créé avec succès",
+		"role": gin.H{
+			"id":         role.ID,
+			"name":       role.Name,
+			"slug":       role.Slug,
+			"created_at": role.CreatedAt.Format(time.RFC3339),
+		},
+	})
+}
+
+func (h *AuthHandler) DeleteRole(c *gin.Context) {
+	roleID := c.Param("id")
+	if roleID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "ID du rôle manquant",
+		})
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	// Empêcher la suppression des rôles système
+	if roleID == "1" || roleID == "2" || roleID == "3" || roleID == "4" {
+		c.JSON(http.StatusForbidden, gin.H{
+			"error": "Impossible de supprimer un rôle système",
+		})
+		return
+	}
+
+	// Vérifier que le rôle existe
+	_, err := h.roleRepo.FindByID(ctx, roleID)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "Rôle introuvable",
+			})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Erreur lors de la recherche du rôle",
+			})
+		}
+		return
+	}
+
+	if err := h.roleRepo.Delete(ctx, roleID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Erreur lors de la suppression du rôle",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Rôle supprimé avec succès",
+		"role_id": roleID,
+	})
 }

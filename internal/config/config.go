@@ -22,7 +22,7 @@ func Load() error {
 	}
 
 	AppConfig = &Config{
-		Port:      getEnv("PORT", "8080"),
+		Port:      getEnv("PORT", "8082"),
 		MongoURI:  getEnv("MONGODB_URI", ""),
 		DBName:    getEnv("DB_NAME", "onestay"),
 		JWTSecret: getEnv("JWT_SECRET", "your-secret-key-change-in-production"),

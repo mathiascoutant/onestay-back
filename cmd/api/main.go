@@ -7,7 +7,6 @@ import (
 	"onestay-back/internal/config"
 	"onestay-back/internal/database"
 	"onestay-back/internal/router"
-	"onestay-back/internal/seed"
 )
 
 func main() {
@@ -19,10 +18,6 @@ func main() {
 		log.Fatal("Erreur lors de la connexion à MongoDB:", err)
 	}
 	defer database.Disconnect()
-
-	if err := seed.SeedRoles(); err != nil {
-		log.Fatal("Erreur lors de l'initialisation des rôles:", err)
-	}
 
 	r := router.SetupRouter()
 

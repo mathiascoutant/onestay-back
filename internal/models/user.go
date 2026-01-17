@@ -12,7 +12,7 @@ type User struct {
 	Prenom    string             `json:"prenom" bson:"prenom" binding:"required"`
 	Email     string             `json:"email" bson:"email" binding:"required,email"`
 	Password  string             `json:"-" bson:"password" binding:"required,min=6"`
-	RoleID    primitive.ObjectID `json:"role_id" bson:"role_id"`
+	RoleID    string             `json:"role_id" bson:"role_id"`
 	CreatedAt time.Time          `json:"created_at" bson:"created_at"`
 	UpdatedAt time.Time          `json:"updated_at" bson:"updated_at"`
 }
@@ -39,6 +39,6 @@ type UserProfile struct {
 	Nom       string             `json:"nom"`
 	Prenom    string             `json:"prenom"`
 	Email     string             `json:"email"`
-	RoleID    primitive.ObjectID `json:"role_id"`
+	RoleID    string             `json:"role_id"`
 	CreatedAt time.Time          `json:"created_at"`
 }

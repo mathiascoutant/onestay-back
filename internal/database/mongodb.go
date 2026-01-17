@@ -7,8 +7,8 @@ import (
 
 	"onestay-back/internal/config"
 
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 var Client *mongo.Client
@@ -20,7 +20,7 @@ func Connect() error {
 
 	clientOptions := options.Client().ApplyURI(config.AppConfig.MongoURI)
 
-	client, err := mongo.Connect(ctx, clientOptions)
+	client, err := mongo.Connect(clientOptions)
 	if err != nil {
 		return err
 	}
@@ -32,7 +32,7 @@ func Connect() error {
 	Client = client
 	DB = client.Database(config.AppConfig.DBName)
 
-	log.Println("Connected to MongoDB successfully")
+	log.Printf("Connected to MongoDB successfully - Database: %s", config.AppConfig.DBName)
 	return nil
 }
 

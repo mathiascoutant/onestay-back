@@ -13,13 +13,14 @@ func SeedRoles() error {
 	roleRepo := repository.NewRoleRepository()
 
 	roles := []struct {
+		id   string
 		name string
 		slug string
 	}{
-		{"Client", models.RoleClient},
-		{"Loueur", models.RoleLoueur},
-		{"Admin", models.RoleAdmin},
-		{"Super Admin", models.RoleSuperAdmin},
+		{"1", "Client", models.RoleClient},
+		{"2", "Loueur", models.RoleLoueur},
+		{"3", "Admin", models.RoleAdmin},
+		{"4", "Super Admin", models.RoleSuperAdmin},
 	}
 
 	for _, roleData := range roles {
@@ -30,6 +31,7 @@ func SeedRoles() error {
 
 		if !exists {
 			role := &models.Role{
+				ID:   roleData.id,
 				Name: roleData.name,
 				Slug: roleData.slug,
 			}
@@ -37,7 +39,7 @@ func SeedRoles() error {
 			if err := roleRepo.Create(ctx, role); err != nil {
 				return err
 			}
-			log.Printf("Rôle créé: %s (%s)", roleData.name, roleData.slug)
+			log.Printf("Rôle créé: %s (%s) avec ID: %s", roleData.name, roleData.slug, roleData.id)
 		} else {
 			log.Printf("Rôle déjà existant: %s (%s)", roleData.name, roleData.slug)
 		}

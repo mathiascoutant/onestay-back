@@ -2,14 +2,14 @@ package repository
 
 import (
 	"context"
+	"log"
 	"time"
 
 	"onestay-back/internal/database"
 	"onestay-back/internal/models"
 
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
 type RoleRepository struct {
@@ -23,7 +23,6 @@ func NewRoleRepository() *RoleRepository {
 }
 
 func (r *RoleRepository) Create(ctx context.Context, role *models.Role) error {
-	role.ID = primitive.NewObjectID()
 	role.CreatedAt = time.Now()
 	role.UpdatedAt = time.Now()
 
@@ -31,21 +30,31 @@ func (r *RoleRepository) Create(ctx context.Context, role *models.Role) error {
 	return err
 }
 
+func (r *RoleRepository) Delete(ctx context.Context, id string) error {
+	_, err := r.collection.DeleteOne(ctx, bson.M{"_id": id})
+	return err
+}
+
 func (r *RoleRepository) FindBySlug(ctx context.Context, slug string) (*models.Role, error) {
-	var role models.Role
-	err := r.collection.FindOne(ctx, bson.M{"slug": slug}).Decode(&role)
+	var raw bson.M
+	err := r.collection.FindOne(ctx, bson.M{"slug": slug}).Decode(&raw)
 	if err != nil {
 		return nil, err
 	}
+	role := decodeRoleFromRaw(raw)
 	return &role, nil
 }
 
-func (r *RoleRepository) FindByID(ctx context.Context, id primitive.ObjectID) (*models.Role, error) {
-	var role models.Role
-	err := r.collection.FindOne(ctx, bson.M{"_id": id}).Decode(&role)
+func (r *RoleRepository) FindByID(ctx context.Context, id string) (*models.Role, error) {
+	filter := bson.M{"_id": id}
+	
+	var raw bson.M
+	err := r.collection.FindOne(ctx, filter).Decode(&raw)
 	if err != nil {
 		return nil, err
 	}
+	
+	role := decodeRoleFromRaw(raw)
 	return &role, nil
 }
 
@@ -65,8 +74,57 @@ func (r *RoleRepository) GetAll(ctx context.Context) ([]models.Role, error) {
 	defer cursor.Close(ctx)
 
 	var roles []models.Role
-	if err := cursor.All(ctx, &roles); err != nil {
+	for cursor.Next(ctx) {
+		var raw bson.M
+		if err := cursor.Decode(&raw); err != nil {
+			log.Printf("Erreur de décodage brut: %v", err)
+			continue
+		}
+		
+		role := decodeRoleFromRaw(raw)
+		roles = append(roles, role)
+	}
+	
+	if err := cursor.Err(); err != nil {
 		return nil, err
 	}
+	
 	return roles, nil
+}
+
+func decodeRoleFromRaw(raw bson.M) models.Role {
+	role := models.Role{
+		Name: getString(raw, "name"),
+		Slug: getString(raw, "slug"),
+	}
+	
+	// Convertir l'ID string depuis le document brut
+	if idVal, ok := raw["_id"]; ok {
+		if idStr, ok := idVal.(string); ok {
+			role.ID = idStr
+		}
+	}
+	
+	// Convertir les timestamps
+	if createdAt, ok := raw["created_at"].(int64); ok {
+		role.CreatedAt = time.Unix(createdAt/1000, (createdAt%1000)*1000000)
+	} else if createdAt, ok := raw["created_at"].(time.Time); ok {
+		role.CreatedAt = createdAt
+	}
+	if updatedAt, ok := raw["updated_at"].(int64); ok {
+		role.UpdatedAt = time.Unix(updatedAt/1000, (updatedAt%1000)*1000000)
+	} else if updatedAt, ok := raw["updated_at"].(time.Time); ok {
+		role.UpdatedAt = updatedAt
+	}
+	
+	return role
+}
+
+func getString(m bson.M, key string) string {
+	if val, ok := m[key]; ok {
+		if str, ok := val.(string); ok {
+			return str
+		}
+	}
+	return ""
 }
