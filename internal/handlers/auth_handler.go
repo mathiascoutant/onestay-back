@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
@@ -516,5 +517,62 @@ func (h *AuthHandler) DeleteUser(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Utilisateur supprimé avec succès",
 		"user_id": userID,
+	})
+}
+
+func (h *AuthHandler) GetProfile(c *gin.Context) {
+	// Récupérer l'ID de l'utilisateur depuis le contexte (défini par le middleware)
+	userIDInterface, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "Utilisateur non authentifié",
+		})
+		return
+	}
+
+	userID, ok := userIDInterface.(primitive.ObjectID)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Erreur lors de la récupération de l'ID utilisateur",
+		})
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	// Récupérer l'utilisateur
+	user, err := h.userRepo.FindByID(ctx, userID.Hex())
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "Utilisateur introuvable",
+			})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Erreur lors de la récupération de l'utilisateur",
+			})
+		}
+		return
+	}
+
+	// Récupérer le rôle complet
+	role, err := h.roleRepo.FindByID(ctx, user.RoleID)
+	if err != nil {
+		// Si le rôle n'est pas trouvé, créer un rôle vide
+		role = &models.Role{
+			ID:   user.RoleID,
+			Name: "Rôle introuvable",
+			Slug: "unknown",
+		}
+	}
+
+	// Retourner le profil avec le rôle complet
+	c.JSON(http.StatusOK, models.UserWithRole{
+		ID:        user.ID,
+		Nom:       user.Nom,
+		Prenom:    user.Prenom,
+		Email:     user.Email,
+		Role:      *role,
+		CreatedAt: user.CreatedAt,
 	})
 }
