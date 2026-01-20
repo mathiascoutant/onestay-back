@@ -45,7 +45,7 @@ func SetupRouter() *gin.Engine {
 		logements := api.Group("/logements")
 		{
 			logements.POST("", middleware.AuthMiddleware(), logementHandler.CreateLogement)
-			logements.GET("/user/:id", middleware.AuthMiddleware(), logementHandler.GetUserLogements)
+			logements.GET("/user/:id", logementHandler.GetUserLogements)
 		}
 	}
 

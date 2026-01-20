@@ -2,9 +2,11 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
 
 	"onestay-back/internal/models"
 	"onestay-back/internal/repository"
+	"onestay-back/internal/utils"
 
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -119,27 +121,54 @@ func (h *LogementHandler) GetUserLogements(c *gin.Context) {
 		return
 	}
 
-	// Récupérer l'ID de l'utilisateur depuis le token JWT
-	userIDInterface, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "Utilisateur non authentifié",
-		})
-		return
-	}
-
-	tokenUserID, ok := userIDInterface.(primitive.ObjectID)
-	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Erreur lors de la récupération de l'ID utilisateur",
-		})
-		return
-	}
-
 	ctx := c.Request.Context()
 
+	// Essayer de récupérer l'ID de l'utilisateur depuis le token JWT (optionnel)
+	var tokenUserID primitive.ObjectID
+	var isOwner bool
+
+	// Vérifier si un token est présent dans le contexte (défini par le middleware)
+	userIDInterface, exists := c.Get("user_id")
+	if exists {
+		if id, ok := userIDInterface.(primitive.ObjectID); ok {
+			tokenUserID = id
+			// Vérifier si c'est le propriétaire
+			isOwner = requestedUserID == tokenUserID
+		}
+	} else {
+		// Si pas dans le contexte, essayer d'extraire le token manuellement
+		var tokenString string
+		
+		// Récupérer le header Authorization
+		authHeader := c.GetHeader("Authorization")
+		if authHeader != "" {
+			authHeader = strings.TrimSpace(authHeader)
+			parts := strings.SplitN(authHeader, " ", 2)
+			if len(parts) == 2 && strings.ToLower(parts[0]) == "bearer" {
+				tokenString = strings.TrimSpace(parts[1])
+			}
+		}
+		
+		// Si pas trouvé dans Authorization, vérifier le header "Bearer" directement
+		if tokenString == "" {
+			bearerHeader := c.GetHeader("Bearer")
+			if bearerHeader != "" {
+				tokenString = strings.TrimSpace(bearerHeader)
+			}
+		}
+		
+		// Si un token est présent, essayer de le valider
+		if tokenString != "" {
+			claims, err := utils.ValidateToken(tokenString)
+			if err == nil {
+				tokenUserID = claims.UserID
+				isOwner = requestedUserID == tokenUserID
+			}
+		}
+	}
+
 	// Déterminer si on doit inclure les brouillons (seulement si c'est le propriétaire)
-	includeBrouillon := requestedUserID == tokenUserID
+	includeBrouillon := isOwner
 
 	// Récupérer les logements
 	logements, err := h.logementRepo.FindByUserID(ctx, requestedUserID, includeBrouillon)
