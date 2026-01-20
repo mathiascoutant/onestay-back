@@ -42,3 +42,20 @@ type UserProfile struct {
 	RoleID    string             `json:"role_id"`
 	CreatedAt time.Time          `json:"created_at"`
 }
+
+type UserWithRole struct {
+	ID        primitive.ObjectID `json:"id"`
+	Nom       string             `json:"nom"`
+	Prenom    string             `json:"prenom"`
+	Email     string             `json:"email"`
+	Role      Role               `json:"role"`
+	CreatedAt time.Time          `json:"created_at"`
+}
+
+type UpdateUserRequest struct {
+	Nom      string `json:"nom"`
+	Prenom   string `json:"prenom"`
+	Email    string `json:"email" binding:"omitempty,email"`
+	Password string `json:"password" binding:"omitempty,min=6"`
+	RoleID   string `json:"role_id"`
+}

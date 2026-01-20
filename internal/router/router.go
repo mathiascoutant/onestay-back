@@ -16,11 +16,18 @@ func SetupRouter() *gin.Engine {
 	{
 		auth := api.Group("/auth")
 		{
-			auth.POST("/register", middleware.AuthMiddleware(), middleware.RequireAdmin(), authHandler.Register)
 			auth.POST("/login", authHandler.Login)
 			auth.GET("/roles", middleware.AuthMiddleware(), middleware.RequireAdmin(), authHandler.GetRoles)
 			auth.POST("/roles", middleware.AuthMiddleware(), middleware.RequireSuperAdmin(), authHandler.CreateRole)
 			auth.DELETE("/roles/:id", middleware.AuthMiddleware(), middleware.RequireSuperAdmin(), authHandler.DeleteRole)
+		}
+
+		users := api.Group("/users")
+		{
+			users.POST("/register", middleware.AuthMiddleware(), middleware.RequireAdmin(), authHandler.Register)
+			users.GET("", middleware.AuthMiddleware(), middleware.RequireAdmin(), authHandler.GetAllUsers)
+			users.PUT("/:id", middleware.AuthMiddleware(), middleware.RequireAdmin(), authHandler.UpdateUser)
+			users.DELETE("/:id", middleware.AuthMiddleware(), middleware.RequireAdmin(), authHandler.DeleteUser)
 		}
 	}
 
