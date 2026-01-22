@@ -21,7 +21,7 @@ func SetupRouter() *gin.Engine {
 	}))
 
 	authHandler := handlers.NewAuthHandler()
-	logementHandler := handlers.NewLogementHandler()
+	propertyHandler := handlers.NewPropertyHandler()
 
 	api := r.Group("/api/v1")
 	{
@@ -42,10 +42,14 @@ func SetupRouter() *gin.Engine {
 			users.DELETE("/:id", middleware.AuthMiddleware(), middleware.RequireAdmin(), authHandler.DeleteUser)
 		}
 
-		logements := api.Group("/logements")
+		properties := api.Group("/properties")
 		{
-			logements.POST("", middleware.AuthMiddleware(), logementHandler.CreateLogement)
-			logements.GET("/user/:id", logementHandler.GetUserLogements)
+			properties.POST("", middleware.AuthMiddleware(), propertyHandler.CreateProperty)
+			properties.GET("/user/:id", propertyHandler.GetUserProperties)
+			properties.GET("/:id", propertyHandler.GetProperty)
+			properties.PUT("/:id", middleware.AuthMiddleware(), propertyHandler.UpdateProperty)
+			properties.POST("/:id/publish", middleware.AuthMiddleware(), propertyHandler.PublishProperty)
+			properties.DELETE("/:id", middleware.AuthMiddleware(), propertyHandler.DeleteProperty)
 		}
 	}
 
