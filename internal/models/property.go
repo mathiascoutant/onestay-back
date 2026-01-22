@@ -10,7 +10,7 @@ import (
 type Property struct {
 	ID                   primitive.ObjectID    `json:"_id" bson:"_id,omitempty"`
 	HostID               primitive.ObjectID    `json:"hostId" bson:"hostId" binding:"required"`
-	Status               string                `json:"status" bson:"status" binding:"required"` // "draft" ou "published"
+	Status               int                   `json:"status" bson:"status"` // 1 = brouillon, 2 = publié
 	Slug                 string                `json:"slug" bson:"slug" binding:"required"`
 	Name                 string                `json:"name" bson:"name" binding:"required"`
 	Description          string                `json:"description,omitempty" bson:"description,omitempty"`

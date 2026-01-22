@@ -44,6 +44,18 @@ func (r *PropertyRepository) ExistsBySlug(ctx context.Context, slug string) (boo
 	return count > 0, nil
 }
 
+// ExistsByNameAndHostID vérifie si un logement avec le même nom existe déjà pour cet hôte
+func (r *PropertyRepository) ExistsByNameAndHostID(ctx context.Context, name string, hostID primitive.ObjectID) (bool, error) {
+	count, err := r.collection.CountDocuments(ctx, bson.M{
+		"name":   name,
+		"hostId": hostID,
+	})
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
 // FindBySlug trouve une propriété par son slug
 func (r *PropertyRepository) FindBySlug(ctx context.Context, slug string) (*models.Property, error) {
 	var property models.Property
@@ -68,9 +80,9 @@ func (r *PropertyRepository) FindByID(ctx context.Context, id primitive.ObjectID
 func (r *PropertyRepository) FindByHostID(ctx context.Context, hostID primitive.ObjectID, includeDraft bool) ([]models.Property, error) {
 	filter := bson.M{"hostId": hostID}
 	
-	// Si on ne doit pas inclure les brouillons, filtrer uniquement les publiés
+	// Si on ne doit pas inclure les brouillons, filtrer uniquement les publiés (status = 2)
 	if !includeDraft {
-		filter["status"] = "published"
+		filter["status"] = 2
 	}
 
 	cursor, err := r.collection.Find(ctx, filter)
@@ -106,7 +118,7 @@ func (r *PropertyRepository) Delete(ctx context.Context, id primitive.ObjectID) 
 
 // FindAll trouve toutes les propriétés publiées (pour recherche publique)
 func (r *PropertyRepository) FindAll(ctx context.Context, limit, skip int64) ([]models.Property, error) {
-	filter := bson.M{"status": "published"}
+	filter := bson.M{"status": 2} // 2 = publié
 	
 	opts := options.Find().
 		SetLimit(limit).

@@ -55,6 +55,21 @@ func (h *PropertyHandler) CreateProperty(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
+	// Vérifier que le nom n'est pas déjà utilisé par cet hôte
+	nameExists, err := h.propertyRepo.ExistsByNameAndHostID(ctx, req.Name, hostID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Erreur lors de la vérification du nom",
+		})
+		return
+	}
+	if nameExists {
+		c.JSON(http.StatusConflict, gin.H{
+			"error": "Vous avez déjà un logement avec ce nom",
+		})
+		return
+	}
+
 	// Générer le slug à partir du nom
 	baseSlug := utils.GenerateSlug(req.Name)
 	slug := baseSlug
@@ -79,7 +94,7 @@ func (h *PropertyHandler) CreateProperty(c *gin.Context) {
 	// Créer les sous-documents par défaut si non fournis
 	property := &models.Property{
 		HostID:      hostID,
-		Status:      "draft",
+		Status:      1, // 1 = brouillon, 2 = publié
 		Slug:        slug,
 		Name:        req.Name,
 		Description: req.Description,
@@ -268,7 +283,8 @@ func (h *PropertyHandler) GetUserProperties(c *gin.Context) {
 	properties, err := h.propertyRepo.FindByHostID(ctx, requestedUserID, includeDraft)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Erreur lors de la récupération des propriétés",
+			"error":   "Erreur lors de la récupération des propriétés",
+			"details": err.Error(),
 		})
 		return
 	}
@@ -315,8 +331,8 @@ func (h *PropertyHandler) GetProperty(c *gin.Context) {
 		return
 	}
 
-	// Si la propriété est en brouillon, vérifier que l'utilisateur est le propriétaire
-	if property.Status == "draft" {
+	// Si la propriété est en brouillon (status = 1), vérifier que l'utilisateur est le propriétaire
+	if property.Status == 1 {
 		userIDInterface, exists := c.Get("user_id")
 		if !exists {
 			c.JSON(http.StatusNotFound, gin.H{
@@ -518,7 +534,7 @@ func (h *PropertyHandler) UpdateProperty(c *gin.Context) {
 	})
 }
 
-// PublishProperty publie une propriété (change le status de "draft" à "published")
+// PublishProperty publie une propriété (change le status de 1 à 2)
 func (h *PropertyHandler) PublishProperty(c *gin.Context) {
 	identifier := c.Param("id")
 	if identifier == "" {
@@ -564,10 +580,10 @@ func (h *PropertyHandler) PublishProperty(c *gin.Context) {
 		return
 	}
 
-	// Mettre à jour le status
+	// Mettre à jour le status (2 = publié)
 	now := time.Now()
 	updates := map[string]interface{}{
-		"status":     "published",
+		"status":      2,
 		"publishedAt": now,
 	}
 
