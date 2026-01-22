@@ -16,14 +16,16 @@ import (
 )
 
 type AuthHandler struct {
-	userRepo *repository.UserRepository
-	roleRepo *repository.RoleRepository
+	userRepo     *repository.UserRepository
+	roleRepo     *repository.RoleRepository
+	propertyRepo *repository.PropertyRepository
 }
 
 func NewAuthHandler() *AuthHandler {
 	return &AuthHandler{
-		userRepo: repository.NewUserRepository(),
-		roleRepo: repository.NewRoleRepository(),
+		userRepo:     repository.NewUserRepository(),
+		roleRepo:     repository.NewRoleRepository(),
+		propertyRepo: repository.NewPropertyRepository(),
 	}
 }
 
@@ -574,5 +576,187 @@ func (h *AuthHandler) GetProfile(c *gin.Context) {
 		Email:     user.Email,
 		Role:      *role,
 		CreatedAt: user.CreatedAt,
+	})
+}
+
+// UpdateProfile permet à un utilisateur de modifier ses propres informations
+func (h *AuthHandler) UpdateProfile(c *gin.Context) {
+	// Récupérer l'ID de l'utilisateur depuis le contexte
+	userIDInterface, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "Utilisateur non authentifié",
+		})
+		return
+	}
+
+	userID, ok := userIDInterface.(primitive.ObjectID)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Erreur lors de la récupération de l'ID utilisateur",
+		})
+		return
+	}
+
+	var req models.UpdateUserRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Données invalides",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	// Récupérer l'utilisateur actuel
+	user, err := h.userRepo.FindByID(ctx, userID.Hex())
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "Utilisateur introuvable",
+			})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Erreur lors de la recherche de l'utilisateur",
+			})
+		}
+		return
+	}
+
+	// Construire les mises à jour
+	updates := bson.M{}
+	if req.Nom != "" {
+		updates["nom"] = req.Nom
+	}
+	if req.Prenom != "" {
+		updates["prenom"] = req.Prenom
+	}
+	if req.Email != "" {
+		// Vérifier que l'email n'est pas déjà utilisé par un autre compte
+		if req.Email != user.Email {
+			exists, err := h.userRepo.ExistsByEmail(ctx, req.Email)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error": "Erreur lors de la vérification de l'email",
+				})
+				return
+			}
+			if exists {
+				c.JSON(http.StatusConflict, gin.H{
+					"error": "Cet email est déjà utilisé par un autre compte",
+				})
+				return
+			}
+		}
+		updates["email"] = req.Email
+	}
+	if req.Password != "" {
+		hashedPassword, err := utils.HashPassword(req.Password)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Erreur lors du hachage du mot de passe",
+			})
+			return
+		}
+		updates["password"] = hashedPassword
+	}
+	// Note: L'utilisateur ne peut pas changer son propre rôle
+
+	if len(updates) == 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Aucune modification à appliquer",
+		})
+		return
+	}
+
+	updates["updated_at"] = time.Now()
+
+	// Appliquer les mises à jour
+	if err := h.userRepo.Update(ctx, userID.Hex(), updates); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Erreur lors de la mise à jour du profil",
+		})
+		return
+	}
+
+	// Récupérer l'utilisateur mis à jour
+	updatedUser, err := h.userRepo.FindByID(ctx, userID.Hex())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Erreur lors de la récupération du profil mis à jour",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Profil mis à jour avec succès",
+		"user": models.UserProfile{
+			ID:        updatedUser.ID,
+			Nom:       updatedUser.Nom,
+			Prenom:    updatedUser.Prenom,
+			Email:     updatedUser.Email,
+			RoleID:    updatedUser.RoleID,
+			CreatedAt: updatedUser.CreatedAt,
+		},
+	})
+}
+
+// DeleteAccount permet à un utilisateur de supprimer son propre compte et tous ses logements
+func (h *AuthHandler) DeleteAccount(c *gin.Context) {
+	// Récupérer l'ID de l'utilisateur depuis le contexte
+	userIDInterface, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "Utilisateur non authentifié",
+		})
+		return
+	}
+
+	userID, ok := userIDInterface.(primitive.ObjectID)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Erreur lors de la récupération de l'ID utilisateur",
+		})
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	// Vérifier que l'utilisateur existe
+	_, err := h.userRepo.FindByID(ctx, userID.Hex())
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "Utilisateur introuvable",
+			})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Erreur lors de la recherche de l'utilisateur",
+			})
+		}
+		return
+	}
+
+	// Supprimer tous les logements de l'utilisateur
+	deletedProperties, err := h.propertyRepo.DeleteByHostID(ctx, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Erreur lors de la suppression des logements",
+		})
+		return
+	}
+
+	// Supprimer l'utilisateur
+	if err := h.userRepo.Delete(ctx, userID.Hex()); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Erreur lors de la suppression du compte",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":            "Compte supprimé avec succès",
+		"deleted_properties": deletedProperties,
 	})
 }

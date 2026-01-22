@@ -116,6 +116,15 @@ func (r *PropertyRepository) Delete(ctx context.Context, id primitive.ObjectID) 
 	return err
 }
 
+// DeleteByHostID supprime toutes les propriétés d'un hôte
+func (r *PropertyRepository) DeleteByHostID(ctx context.Context, hostID primitive.ObjectID) (int64, error) {
+	result, err := r.collection.DeleteMany(ctx, bson.M{"hostId": hostID})
+	if err != nil {
+		return 0, err
+	}
+	return result.DeletedCount, nil
+}
+
 // FindAll trouve toutes les propriétés publiées (pour recherche publique)
 func (r *PropertyRepository) FindAll(ctx context.Context, limit, skip int64) ([]models.Property, error) {
 	filter := bson.M{"status": 2} // 2 = publié

@@ -37,6 +37,8 @@ func SetupRouter() *gin.Engine {
 		{
 			users.POST("/register", middleware.AuthMiddleware(), middleware.RequireAdmin(), authHandler.Register)
 			users.GET("/profile", middleware.AuthMiddleware(), authHandler.GetProfile)
+			users.PUT("/profile", middleware.AuthMiddleware(), authHandler.UpdateProfile)
+			users.DELETE("/profile", middleware.AuthMiddleware(), authHandler.DeleteAccount)
 			users.GET("", middleware.AuthMiddleware(), middleware.RequireAdmin(), authHandler.GetAllUsers)
 			users.PUT("/:id", middleware.AuthMiddleware(), middleware.RequireAdmin(), authHandler.UpdateUser)
 			users.DELETE("/:id", middleware.AuthMiddleware(), middleware.RequireAdmin(), authHandler.DeleteUser)
